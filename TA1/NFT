@@ -1,0 +1,79 @@
+// SPDX-License-Identifier: MIT
+
+pragma solidity ^0.8.0;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+
+contract Auction is ERC721 {// ERC721 here is a parent contract
+    constructor(string memory name, string memory symbol) ERC721(name, symbol){
+//constructor() ERC721("Auction","AUC")public{
+    }
+}
+
+contract NFTAuction{
+    //storage variables
+    //Parameters of auction (data that cannot be change over the life of the contract)
+    address payable public owner; // tells solidity this address can be used to send some coins
+    uint public auctionEndTime; //it will keep track of the time(the end of the auction)
+
+    //state of the auctionEndTime (data that can be change)
+    address public highestBidder;
+    uint public highestBid; //price
+
+    mapping(address => uint) public fundsByBidder; //keep track of the address and the amount
+
+    bool ended = false; //track whether the auction ended or not
+
+    //log data to the blockchain
+    event HighestBidIncrease (address bidder, uint amount); //track who is the bidder using his address and the amount
+    event AuctionEnded (address winner, uint amount); //when the auction has ended it will log who is the winner and the amount
+    constructor(uint _biddingTime,address payable _owner){//constructor function will run whenever the smart contract is deployed the blockchain. It allows us to specify some values
+        owner = _owner;
+        auctionEndTime = block.timestamp + _biddingTime;
+    }
+    
+    function bid() public payable{ // allow users to bid (Everyone can send their bids during a certain bidding period, if the highest bid is raised, the pervious highest bidder gets their money back. After the end of that period, contract has to be called for the owners to receive their money.)
+        if (block.timestamp > auctionEndTime){
+            revert(" Sorry the auction has ended ");
+        }
+
+        if (msg.value <= highestBid){
+            revert(" Higher or equal bid already exist ");
+        }
+        
+        if (highestBid != 0){
+            fundsByBidder[highestBidder] += highestBid;
+        }
+        highestBidder = msg.sender;
+        highestBid = msg.value;
+        emit HighestBidIncrease(msg.sender, msg.value);
+
+    }
+    function withdraw() public returns(bool){ // users who is over bid can withdraw
+        uint amount= fundsByBidder[msg.sender];
+        if(amount > 0){
+            fundsByBidder[msg.sender] = 0;
+            if(!payable(msg.sender).send(amount)){
+                fundsByBidder[msg.sender] = amount;
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function auctionEnd() public { //end the auction when the time is over and send the fund to the owner
+    if(block.timestamp < auctionEndTime){
+        revert ("The auction still going");
+    }
+    
+    if(ended){
+        revert("The function auctionEnded has already been called ");
+    }
+    ended = true;
+
+    owner.transfer(highestBid);
+    }
+}
+
+// When we use public that means the smart contract is publicly available(this function can be called outside the smart contract)run smart contract for the deployment. 
+// The difference between plain address and address payable is that address payable has transfer and send and can send Ether to, while a plain address cannot be sent Ether.
